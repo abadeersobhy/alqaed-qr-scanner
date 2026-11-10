@@ -4,74 +4,338 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>القائد الخادم - QR Scanner</title>
+  <title>القائد الخادم - تسجيل الحضور</title>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
+    * { box-sizing: border-box; }
+
     body {
       font-family: Arial, sans-serif;
       background: #f3f0e8;
-      text-align: center;
-      padding: 20px;
       color: #293b32;
+      text-align: center;
+      padding: 18px;
+      margin: 0;
     }
+
     .card {
-      max-width: 500px;
-      margin: 30px auto;
-      padding: 24px;
+      max-width: 520px;
+      margin: 25px auto;
+      padding: 25px;
       background: white;
       border-radius: 18px;
       box-shadow: 0 3px 15px #0002;
     }
-    h2 { color: #344f40; }
-    #reader { width: 100%; margin: 20px auto; }
-    #result {
-      padding: 14px;
-      background: #f0f4ef;
+
+    h1 { color: #344f40; font-size: 27px; }
+
+    input {
+      width: 100%;
+      padding: 15px;
+      margin: 12px 0;
+      border: 1px solid #ccc;
       border-radius: 10px;
-      overflow-wrap: anywhere;
+      font-size: 18px;
+      text-align: center;
     }
+
     button {
-      padding: 12px 22px;
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
       border: 0;
-      border-radius: 9px;
+      border-radius: 10px;
       background: #344f40;
       color: white;
-      font-size: 16px;
+      font-size: 17px;
       cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    #reader {
+      width: 100%;
+      margin: 20px auto;
+    }
+
+    #result {
+      padding: 16px;
+      margin-top: 18px;
+      background: #f0f4ef;
+      border-radius: 12px;
+      line-height: 1.8;
+      overflow-wrap: anywhere;
+    }
+
+    .hidden { display: none; }
+
+    .success { color: #176b38; }
+    .error { color: #b3261e; }
+
+    .small {
+      font-size: 13px;
+      color: #777;
+      line-height: 1.7;
     }
   </style>
 </head>
+
 <body>
-  <div class="card">
-    <h2>القائد الخادم</h2>
-    <p>نظام تسجيل الحضور والانصراف</p>
-    <div id="reader"></div>
-    <p id="result">اضغط Start لبدء مسح QR Code</p>
-    <button onclick="startScanner()">بدء المسح</button>
+
+<div class="card">
+
+  <h1>القائد الخادم</h1>
+  <p>نظام تسجيل الحضور والانصراف</p>
+
+  <div id="loginArea">
+
+    <label>PIN المسؤول</label>
+
+    <input
+      id="pin"
+      type="password"
+      inputmode="numeric"
+      placeholder="أدخل الرقم السري"
+      autocomplete="off"
+    >
+
+    <button onclick="startScanner()">
+      بدء المسح
+    </button>
+
   </div>
 
-  <script>
-    let scanner;
+  <div id="scannerArea" class="hidden">
 
-    function startScanner() {
-      if (!scanner) {
-        scanner = new Html5Qrcode("reader");
-      }
+    <div id="reader"></div>
 
-      scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          document.getElementById("result").textContent =
-            "تم قراءة QR بنجاح: " + decodedText;
-          scanner.stop();
-        },
-        () => {}
-      ).catch(error => {
-        document.getElementById("result").textContent =
-          "تعذر تشغيل الكاميرا: " + error;
-      });
+    <div id="result">
+      جاهز لمسح QR المتدرب
+    </div>
+
+    <button id="nextButton"
+      class="hidden"
+      onclick="scanNext()">
+      مسح متدرب آخر
+    </button>
+
+    <button onclick="stopScanner()">
+      إيقاف الماسح
+    </button>
+
+  </div>
+
+  <p class="small">
+    نظام تسجيل الحضور والانصراف - القائد الخادم
+  </p>
+
+</div>
+
+<script>
+
+// ضع هنا رابط Web App المنشور من Apps Script
+const API_URL = 'https://script.google.com/macros/s/AKfycbzysv19MnFFOEkm8AxgQVTwWc7wUL18uqfK1KMRgOODc56owLxCUDfmCsBOEdFNzZu8/exec';
+
+let scanner = null;
+let busy = false;
+let currentPin = '';
+
+function showResult(message, type) {
+
+  const result = document.getElementById('result');
+
+  result.className = type || '';
+
+  result.textContent = message;
+}
+
+function startScanner() {
+
+  const pin = document.getElementById('pin').value.trim();
+
+  if (!pin) {
+    alert('من فضلك أدخل PIN المسؤول.');
+    return;
+  }
+
+  if (!API_URL.startsWith('https://script.google.com/macros/s/') ||
+      !API_URL.endsWith('/exec')) {
+    alert('رابط Apps Script غير مضبوط في الكود.');
+    return;
+  }
+
+  currentPin = pin;
+
+  document.getElementById('loginArea').classList.add('hidden');
+  document.getElementById('scannerArea').classList.remove('hidden');
+
+  showResult('جاري تشغيل الكاميرا...', '');
+
+  if (!scanner) {
+    scanner = new Html5Qrcode('reader');
+  }
+
+  scanner.start(
+    { facingMode: 'environment' },
+    {
+      fps: 10,
+      qrbox: { width: 250, height: 250 }
+    },
+    onScanSuccess,
+    () => {}
+  ).catch(error => {
+
+    showResult(
+      'تعذر تشغيل الكاميرا: ' + error,
+      'error'
+    );
+
+    document.getElementById('loginArea').classList.remove('hidden');
+    document.getElementById('scannerArea').classList.add('hidden');
+
+  });
+}
+
+async function onScanSuccess(decodedText) {
+
+  if (busy) return;
+
+  busy = true;
+
+  try {
+    await scanner.stop();
+  } catch (e) {}
+
+  document.getElementById('nextButton').classList.add('hidden');
+
+  showResult('جاري التحقق وتسجيل العملية...', '');
+
+  sendAttendance(decodedText);
+}
+
+function sendAttendance(token) {
+
+  const callbackName = 'handleAttendanceResponse';
+
+  window[callbackName] = function(response) {
+
+    const script = document.getElementById('apiRequest');
+
+    if (script) script.remove();
+
+    delete window[callbackName];
+
+    if (response && response.ok) {
+
+      showResult(
+        response.message +
+        '\nالاسم: ' + response.name +
+        '\nالمجموعة: ' + (response.group || 'غير محددة') +
+        '\nالوقت: ' + response.time,
+        'success'
+      );
+
+    } else {
+
+      showResult(
+        response && response.message
+          ? response.message
+          : 'تعذر تسجيل العملية.',
+        'error'
+      );
+
     }
-  </script>
+
+    document.getElementById('nextButton').classList.remove('hidden');
+
+  };
+
+  const url = new URL(API_URL);
+
+  url.searchParams.set('api', 'scan');
+  url.searchParams.set('token', token);
+  url.searchParams.set('pin', currentPin);
+  url.searchParams.set('callback', callbackName);
+
+  const script = document.createElement('script');
+
+  script.id = 'apiRequest';
+
+  script.src = url.toString();
+
+  script.onerror = function() {
+
+    showResult(
+      'تعذر الاتصال بنظام الحضور. تأكد من الإنترنت ورابط Apps Script.',
+      'error'
+    );
+
+    script.remove();
+
+    delete window[callbackName];
+
+    document.getElementById('nextButton').classList.remove('hidden');
+
+  };
+
+  document.body.appendChild(script);
+}
+
+async function scanNext() {
+
+  busy = false;
+
+  document.getElementById('nextButton').classList.add('hidden');
+
+  showResult('وجّه الكاميرا إلى QR المتدرب التالي.', '');
+
+  try {
+
+    await scanner.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
+      onScanSuccess,
+      () => {}
+    );
+
+  } catch (error) {
+
+    showResult('تعذر إعادة تشغيل الكاميرا: ' + error, 'error');
+
+  }
+}
+
+async function stopScanner() {
+
+  if (scanner) {
+
+    try {
+      await scanner.stop();
+    } catch (e) {}
+
+  }
+
+  busy = false;
+  currentPin = '';
+
+  document.getElementById('pin').value = '';
+
+  document.getElementById('scannerArea').classList.add('hidden');
+  document.getElementById('loginArea').classList.remove('hidden');
+
+  showResult('تم إيقاف الماسح.', '');
+
+}
+
+</script>
+
 </body>
 </html>
